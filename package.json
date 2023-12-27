@@ -1,7 +1,7 @@
 {
     "name": "logseq-plugin-automatic-url-title",
-    "version": "1.1.0",
-    "author": "0x7b1",
+    "version": "1.1.1",
+    "author": "ghostzhang",
     "description": "Automatically fetches the title of a website and wraps it into markdown link format. Also, renders the favicon of the url next to it.",
     "main": "dist/index.html",
     "keywords": [],
@@ -11,7 +11,7 @@
         "icon": "./icon.png"
     },
     "targets": {
-      "main": false
+        "main": false
     },
     "scripts": {
         "test": "echo \"Error: no test specified\" && exit 1",

@@ -150,13 +150,15 @@ const main = async () => {
             oldFav.remove();
         }
         const { hostname } = new URL(extLinkEl.href);
-        const faviconValue = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
-        const fav = doc.createElement('img');
-        fav.src = faviconValue;
-        fav.width = 16;
-        fav.height = 16;
-        fav.classList.add('external-link-img');
-        extLinkEl.insertAdjacentElement('afterbegin', fav);
+        if (hostname != "") {
+            const faviconValue = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+            const fav = doc.createElement('img');
+            fav.src = faviconValue;
+            fav.width = 16;
+            fav.height = 16;
+            fav.classList.add('external-link-img');
+            extLinkEl.insertAdjacentElement('afterbegin', fav);
+        }
     };
 
     // Favicons observer
