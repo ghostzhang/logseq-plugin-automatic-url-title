@@ -5,29 +5,30 @@ const DEFAULT_REGEX = {
     htmlTitleTag: /<title(\s[^>]+)*>([^<]*)<\/title>/,
     line: /(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})/gi,
     imageExtension: /\.(gif|jpe?g|tiff?|png|webp|bmp|tga|psd|ai)$/i,
+    iactionsURI: /((obsidian|cubox):\/\/.*[^\s]{2,})/i,
 };
 
 const FORMAT_SETTINGS = {
     markdown: {
         formatBeginning: '](',
-        applyFormat: (title, url) => `[${title}](${url})`,
+        applyFormat: (title: string, url: string) => `[${title}](${url})`,
     },
     org: {
         formatBeginning: '][',
-        applyFormat: (title, url) => `[[${url}][${title}]]`,
+        applyFormat: (title: string, url: string) => `[[${url}][${title}]]`,
     },
 };
 
-function decodeHTML(input) {
+function decodeHTML(input: string): string {
     if (!input) {
         return '';
     }
 
     const doc = new DOMParser().parseFromString(input, 'text/html');
-    return doc.documentElement.textContent;
+    return doc.documentElement.textContent || '';
 }
 
-async function getTitle(url) {
+async function getTitle(url: string): Promise<string> {
     try {
         const response = await fetch(url);
         const responseText = await response.text();
@@ -42,7 +43,7 @@ async function getTitle(url) {
     return '';
 }
 
-async function convertUrlToMarkdownLink(url, text, urlStartIndex, offset, applyFormat) {
+async function convertUrlToMarkdownLink(url: string, text: string, urlStartIndex: number, offset: number, applyFormat: (title: string, url: string) => string) {
     const title = await getTitle(url);
     if (title === '') {
         return { text, offset };
@@ -58,16 +59,25 @@ async function convertUrlToMarkdownLink(url, text, urlStartIndex, offset, applyF
     };
 }
 
-function isImage(url) {
+function getIactionsURI(url: string) {
+    const uriType = new RegExp(DEFAULT_REGEX.iactionsURI);
+    const match = url.match(uriType);
+    if (match && match.length > 0) {
+        return match[2];
+    }
+    return null;
+}
+
+function isImage(url: string): boolean {
     const imageRegex = new RegExp(DEFAULT_REGEX.imageExtension);
     return imageRegex.test(url);
 }
 
-function isAlreadyFormatted(text, url, urlIndex, formatBeginning) {
+function isAlreadyFormatted(text: string, url: string, urlIndex: number, formatBeginning: string): boolean {
     return text.slice(urlIndex - 2, urlIndex) === formatBeginning;
 }
 
-function isWrappedInCommand(text, url) {
+function isWrappedInCommand(text: string, url: string): boolean {
     const wrappedLinks = text.match(DEFAULT_REGEX.wrappedInCommand);
     if (!wrappedLinks) {
         return false;
@@ -82,10 +92,10 @@ async function getFormatSettings() {
         return null;
     }
 
-    return FORMAT_SETTINGS[preferredFormat];
+    return FORMAT_SETTINGS[preferredFormat as keyof typeof FORMAT_SETTINGS];
 }
 
-async function parseBlockForLink(uuid: string) {
+async function parseBlockForLink(uuid: string): Promise<void> {
     if (!uuid) {
         return;
     }
@@ -146,60 +156,81 @@ const main = async () => {
     // External links favicons
     const setFavicon = (extLinkEl: HTMLAnchorElement) => {
         const oldFav = extLinkEl.querySelector('.external-link-img');
+        const url = extLinkEl.href;
+
         if (oldFav) {
             oldFav.remove();
         }
-        const { hostname } = new URL(extLinkEl.href);
-        if (hostname != "") {
-            const faviconValue = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
-            const fav = doc.createElement('img');
-            fav.src = faviconValue;
-            fav.width = 16;
-            fav.height = 16;
-            fav.classList.add('external-link-img');
-            extLinkEl.insertAdjacentElement('afterbegin', fav);
+        let { hostname } = new URL(url);
+        if (hostname === '') {
+            const uriType = getIactionsURI(url);
+            if (uriType !== null) {
+                switch (uriType) {
+                    case 'obsidian':
+                        hostname = 'obsidian.md';
+                        break;
+                    case 'cubox':
+                        hostname = 'cubox.pro';
+                        break;
+                    default:
+                        break;
+                }
+            }
         }
+
+        const faviconValue = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+        const fav = doc.createElement('img');
+        fav.src = faviconValue;
+        fav.width = 16;
+        fav.height = 16;
+        fav.classList.add('external-link-img');
+        extLinkEl.insertAdjacentElement('afterbegin', fav);
     };
 
     // Favicons observer
     const extLinksObserverConfig = { childList: true, subtree: true };
     const extLinksObserver = new MutationObserver((mutationsList, observer) => {
         for (let i = 0; i < mutationsList.length; i++) {
-            const addedNode = mutationsList[i].addedNodes[0];
+            const addedNode = mutationsList[i].addedNodes[0] as Element;
             if (addedNode && addedNode.childNodes.length) {
                 const extLinkList = addedNode.querySelectorAll('.external-link');
                 if (extLinkList.length) {
                     extLinksObserver.disconnect();
                     for (let i = 0; i < extLinkList.length; i++) {
-                        setFavicon(extLinkList[i]);
+                        setFavicon(extLinkList[i] as HTMLAnchorElement);
                     }
 
-                    extLinksObserver.observe(appContainer, extLinksObserverConfig);
+                    extLinksObserver.observe(appContainer!, extLinksObserverConfig);
                 }
             }
         }
     });
 
     setTimeout(() => {
-        doc.querySelectorAll('.external-link')?.forEach(extLink => setFavicon(extLink));
-        extLinksObserver.observe(appContainer, extLinksObserverConfig);
+        doc.querySelectorAll('.external-link')?.forEach(extLink => setFavicon(extLink as HTMLAnchorElement));
+        extLinksObserver.observe(appContainer!, extLinksObserverConfig);
     }, 500);
 
     logseq.Editor.registerBlockContextMenuItem('Format url titles', async ({ uuid }) => {
         await parseBlockForLink(uuid);
-        const extLinkList: NodeListOf<HTMLAnchorElement> = doc.querySelectorAll('.external-link');
-        extLinkList.forEach(extLink => setFavicon(extLink));
+        const extLinkList = doc.querySelectorAll('.external-link');
+        extLinkList.forEach(extLink => setFavicon(extLink as HTMLAnchorElement));
     });
 
-    const blockSet = new Set();
+    const blockSet = new Set<string>();
     logseq.DB.onChanged(async (e) => {
         if (e.txMeta?.outlinerOp !== 'insertBlocks') {
-            blockSet.add(e.blocks[0]?.uuid);
-            doc.querySelectorAll('.external-link')?.forEach(extLink => setFavicon(extLink));
+            const uuid = e.blocks[0]?.uuid;
+            if (uuid) {
+                blockSet.add(uuid);
+            }
+            doc.querySelectorAll('.external-link')?.forEach(extLink => setFavicon(extLink as HTMLAnchorElement));
             return;
         }
 
-        await blockSet.forEach((uuid) => parseBlockForLink(uuid));
+        for (const uuid of blockSet) {
+            await parseBlockForLink(uuid);
+        }
         blockSet.clear();
     });
 };
